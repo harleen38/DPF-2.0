@@ -4,10 +4,32 @@ import os
 import json
 from operator import itemgetter
 from datetime import datetime, timezone
-from app.dataIO import get_obd_data 
+#from app.dataIO import get_obd_data 
 import requests
 import time
+import matplotlib.pyplot as plt
 
+
+
+def active_regeneration_shift(OBD_data):
+        # extracting the relevant parameter-ID
+        Time = []
+        soot_load_Value = []
+        for pac_idx in range(len(OBD_data)):
+                if "pids" in OBD_data[pac_idx]:
+                    if len(OBD_data[pac_idx]['pids'])>0:
+                        for sub_pid_cnt in range(0,len(OBD_data[pac_idx]['pids'])):
+                                State = OBD_data[pac_idx]['pids'][sub_pid_cnt]
+                                # extracting Soot-Load
+                                if 'spn_5466_avg' in State:
+                                        Time.append(State['spn_5466_avg']['timestamp'])
+                                        soot_load_Value.append(State['spn_5466_avg']['value'][0])
+        
+        slope = np.array(soot_load_Value[1:-1]) - np.array(soot_load_Value[0:-2])
+        min_index = np.argmin(slope)
+
+        return Time[min_index-1]
+                                      
 
 
 # function to be called for generation regeneration evidence
@@ -317,23 +339,37 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 
 
 def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_start_time, active_regeneration_end_time, 
-                            burn_quality_percentage):
-    # extracting the OBD-data 
-    OBD_data = get_obd_data(vehicle_id, active_regeneration_start_time, active_regeneration_end_time)
-  
-    # if the OBD_data is not empty
-    if len(OBD_data): 
-            speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
-                                                        active_regeneration_start_time, active_regeneration_end_time, 
-                                                        burn_quality_percentage)
-    else:
-                # if burn_quality is high --> speed_status should be sufficient --> 1
-                if burn_quality_percentage > 0.6:
-                        speed_status = 1
-                # if burn quality anything apart from high --> speed status should be insufficient --> 0         
+                            burn_quality_percentage, SPEED_FLAG):
+    
+        # extracting the OBD-data 
+        
+        Start_TS = active_regeneration_start_time - 60*60*1000
+        End_TS = active_regeneration_end_time + 60*60*1000
+
+        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)
+
+        # mapping the actual-regeneration time
+        actual_regeneration_time = active_regeneration_shift(OBD_data)
+
+        if SPEED_FLAG == 1:
+                # if the OBD_data is not empty
+                if len(OBD_data): 
+                        speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
+                                                                        active_regeneration_start_time, active_regeneration_end_time, 
+                                                                        burn_quality_percentage)
                 else:
-                        speed_status = 0
-    return speed_status, burn_quality_percentage  
+                        # if burn_quality is high --> speed_status should be sufficient --> 1
+                        if burn_quality_percentage > 0.6:
+                                speed_status = 1
+                        # if burn quality anything apart from high --> speed status should be insufficient --> 0         
+                        else:
+                                speed_status = 0
+        elif SPEED_FLAG == 0:
+                speed_status = 2
+
+        return speed_status, burn_quality_percentage, actual_regeneration_time 
+
+
 
 
 
