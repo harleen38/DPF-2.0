@@ -2,17 +2,15 @@ import pandas as pd
 import numpy as np
 import os
 import json
-from operator import itemgetter
-from datetime import datetime, timezone
 from app.dataIO import get_obd_data 
-import requests
-import time
-import matplotlib.pyplot as plt
 
 
+
+# function to be called for making the active-regeneration point shift
 def active_regeneration_shift(OBD_data, active_regeneration_start_time):
         
         # extracting the relevant parameter-ID
+        soot_load_pid = 'spn_5466_avg'
         Time = []
         soot_load_Value = []
         for pac_idx in range(len(OBD_data)):
@@ -21,9 +19,9 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time):
                         for sub_pid_cnt in range(0,len(OBD_data[pac_idx]['pids'])):
                                 State = OBD_data[pac_idx]['pids'][sub_pid_cnt]
                                 # extracting Soot-Load
-                                if 'spn_5466_avg' in State:
-                                        Time.append(State['spn_5466_avg']['timestamp'])
-                                        soot_load_Value.append(State['spn_5466_avg']['value'][0])
+                                if soot_load_pid in State:
+                                        Time.append(State[soot_load_pid]['timestamp'])
+                                        soot_load_Value.append(State[soot_load_pid]['value'][0])
         
         # if soot_load values not available
         if len(soot_load_Value)==0:
@@ -35,17 +33,9 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time):
 
         # if the point of maximum drop is greater than 10 minutes
         # search for the maximum drop wthin 10 minutes prior to active-regeneration time
-        if (active_regeneration_start_time - Time[min_index-1])>(10*60*1000) or Time[min_index-1]>active_regeneration_start_time:
-               active_regen_idx = (np.abs(np.asarray(Time) - active_regeneration_start_time)).argmin()
-               # take the context window of 15 minutes
-               # look for the point of maximum drop in the 15 miute context window
-               idx_15_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 15*60*1000))).argmin()
-               # if the maximum drop comes at  10<point<15
-               # then pick the point at 10th minute
-               min_index = np.argmin(slope[idx_15_mins_before: active_regen_idx])   
-               if (active_regeneration_start_time - Time[min_index-1]) > (10*60*1000):
-                      idx_10_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 10*60*1000))).argmin()
-                      min_index = idx_10_mins_before
+        if (active_regeneration_start_time - Time[min_index-1])>(10*60*1000):
+                idx_10_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 10*60*1000))).argmin()
+                min_index = idx_10_mins_before
                         
 
         return Time[min_index-1]
@@ -89,6 +79,9 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
  
 
         # extracting the relevant parameter-ID
+        dp_pid = 'spn_3251_avg'
+        rpm_pid = 'spn_190_avg'
+        speed_pid = 'spn_84_avg'
         Time = []
         dp_inst_Value = []
         rpm_inst_Value = []
@@ -99,15 +92,15 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                         for sub_pid_cnt in range(0,len(OBD_data[pac_idx]['pids'])):
                                 State = OBD_data[pac_idx]['pids'][sub_pid_cnt]
                                 # extracting DPFDP
-                                if 'spn_3251_avg' in State:
-                                        Time.append(State['spn_3251_avg']['timestamp'])
-                                        dp_inst_Value.append(State['spn_3251_avg']['value'][0])
+                                if dp_pid in State:
+                                        Time.append(State[dp_pid]['timestamp'])
+                                        dp_inst_Value.append(State[dp_pid]['value'][0])
                                 # extracting RPM        
-                                if 'spn_190_avg' in State:
-                                        rpm_inst_Value.append(State['spn_190_avg']['value'][0])
+                                if rpm_pid in State:
+                                        rpm_inst_Value.append(State[rpm_pid]['value'][0])
                                 # extracting SPEED       
-                                if 'spn_84_avg' in State:
-                                        speed_inst_Value.append(State['spn_84_avg']['value'][0])    
+                                if speed_pid in State:
+                                        speed_inst_Value.append(State[speed_pid]['value'][0])    
 
                                              
                                 
