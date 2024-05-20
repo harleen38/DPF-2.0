@@ -29,16 +29,19 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time):
         
         # if soot load values are available --> find the point where maximum negative slope present
         slope = np.array(soot_load_Value[1:-1]) - np.array(soot_load_Value[0:-2])
-        min_index = np.argmin(slope)
+        adjusted_index = np.argmin(slope)
 
         # if the point of maximum drop is greater than 10 minutes
         # search for the maximum drop wthin 10 minutes prior to active-regeneration time
-        if (active_regeneration_start_time - Time[min_index-1])>(10*60*1000):
+        if (active_regeneration_start_time - Time[adjusted_index-1])>(10*60*1000):
                 idx_10_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 10*60*1000))).argmin()
-                min_index = idx_10_mins_before
+                adjusted_index = idx_10_mins_before
+        if (Time[adjusted_index-1]-active_regeneration_start_time)>(10*60*1000):
+                idx_10_mins_after = (np.abs(np.asarray(Time) - (active_regeneration_start_time + 10*60*1000))).argmin()
+                adjusted_index = idx_10_mins_after       
                         
 
-        return Time[min_index-1]
+        return Time[adjusted_index-1]
                                       
 
 
