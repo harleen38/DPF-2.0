@@ -352,7 +352,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 
 
 def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_start_time, active_regeneration_end_time, 
-                            burn_quality_percentage, SPEED_FLAG):
+                            burn_quality_percentage):
     
         # extracting the OBD-data 
         
@@ -361,25 +361,23 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_sta
 
         OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)  
 
-        if SPEED_FLAG == 1:
-                # if the OBD_data is not empty
-                if len(OBD_data): 
-                        # mapping the actual-regeneration time
-                        actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time)
-                        speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
-                                                                        active_regeneration_start_time, active_regeneration_end_time, 
-                                                                        burn_quality_percentage)
-                else:
-                        actual_regeneration_time = active_regeneration_start_time
-                        # if burn_quality is high --> speed_status should be sufficient --> 1
-                        if burn_quality_percentage > 0.6:
-                                speed_status = 1
-                        # if burn quality anything apart from high --> speed status should be insufficient --> 0         
-                        else:
-                                speed_status = 0
-        elif SPEED_FLAG == 0:
+        
+        # if the OBD_data is not empty
+        if len(OBD_data): 
+                # mapping the actual-regeneration time
                 actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time)
-                speed_status = 1
+                speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
+                                                                active_regeneration_start_time, active_regeneration_end_time, 
+                                                                burn_quality_percentage)
+        else:
+                actual_regeneration_time = active_regeneration_start_time
+                # if burn_quality is high --> speed_status should be sufficient --> 1
+                if burn_quality_percentage > 0.6:
+                        speed_status = 1
+                # if burn quality anything apart from high --> speed status should be insufficient --> 0         
+                else:
+                        speed_status = 0
+        
 
         return speed_status, burn_quality_percentage, actual_regeneration_time 
 
