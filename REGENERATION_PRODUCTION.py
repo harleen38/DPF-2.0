@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 
 def active_regeneration_shift(OBD_data, active_regeneration_start_time):
+        
         # extracting the relevant parameter-ID
         Time = []
         soot_load_Value = []
@@ -34,12 +35,18 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time):
 
         # if the point of maximum drop is greater than 10 minutes
         # search for the maximum drop wthin 10 minutes prior to active-regeneration time
-        if (Time[min_index-1] - active_regeneration_start_time)>(10*60*1000):
+        if (active_regeneration_start_time - Time[min_index-1])>(10*60*1000) or Time[min_index-1]>active_regeneration_start_time:
                active_regen_idx = (np.abs(np.asarray(Time) - active_regeneration_start_time)).argmin()
-               idx_10_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 10*60*1000))).argmin()
-               min_index = np.argmin(slope[idx_10_mins_before: active_regen_idx])   
-             
- 
+               # take the context window of 15 minutes
+               # look for the point of maximum drop in the 15 miute context window
+               idx_15_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 15*60*1000))).argmin()
+               # if the maximum drop comes at  10<point<15
+               # then pick the point at 10th minute
+               min_index = np.argmin(slope[idx_15_mins_before: active_regen_idx])   
+               if (active_regeneration_start_time - Time[min_index-1]) > (10*60*1000):
+                      idx_10_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 10*60*1000))).argmin()
+                      min_index = idx_10_mins_before
+                        
 
         return Time[min_index-1]
                                       
