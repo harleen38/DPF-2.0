@@ -4,14 +4,13 @@ import os
 import json
 from operator import itemgetter
 from datetime import datetime, timezone
-#from app.dataIO import get_obd_data 
+from app.dataIO import get_obd_data 
 import requests
 import time
 import matplotlib.pyplot as plt
 
 
-
-def active_regeneration_shift(OBD_data):
+def active_regeneration_shift(OBD_data, active_regeneration_start_time):
         # extracting the relevant parameter-ID
         Time = []
         soot_load_Value = []
@@ -25,8 +24,22 @@ def active_regeneration_shift(OBD_data):
                                         Time.append(State['spn_5466_avg']['timestamp'])
                                         soot_load_Value.append(State['spn_5466_avg']['value'][0])
         
+        # if soot_load values not available
+        if len(soot_load_Value)==0:
+               return active_regeneration_start_time
+        
+        # if soot load values are available --> find the point where maximum negative slope present
         slope = np.array(soot_load_Value[1:-1]) - np.array(soot_load_Value[0:-2])
         min_index = np.argmin(slope)
+
+        # if the point of maximum drop is greater than 10 minutes
+        # search for the maximum drop wthin 10 minutes prior to active-regeneration time
+        if (Time[min_index-1] - active_regeneration_start_time)>(10*60*1000):
+               active_regen_idx = (np.abs(np.asarray(Time) - active_regeneration_start_time)).argmin()
+               idx_10_mins_before = (np.abs(np.asarray(Time) - (active_regeneration_start_time - 10*60*1000))).argmin()
+               min_index = np.argmin(slope[idx_10_mins_before: active_regen_idx])   
+             
+ 
 
         return Time[min_index-1]
                                       
@@ -346,18 +359,18 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_sta
         Start_TS = active_regeneration_start_time - 60*60*1000
         End_TS = active_regeneration_end_time + 60*60*1000
 
-        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)
-
-        # mapping the actual-regeneration time
-        actual_regeneration_time = active_regeneration_shift(OBD_data)
+        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)  
 
         if SPEED_FLAG == 1:
                 # if the OBD_data is not empty
                 if len(OBD_data): 
+                        # mapping the actual-regeneration time
+                        actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time)
                         speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
                                                                         active_regeneration_start_time, active_regeneration_end_time, 
                                                                         burn_quality_percentage)
                 else:
+                        actual_regeneration_time = active_regeneration_start_time
                         # if burn_quality is high --> speed_status should be sufficient --> 1
                         if burn_quality_percentage > 0.6:
                                 speed_status = 1
@@ -365,9 +378,13 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_sta
                         else:
                                 speed_status = 0
         elif SPEED_FLAG == 0:
-                speed_status = 2
+                actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time)
+                speed_status = 1
 
         return speed_status, burn_quality_percentage, actual_regeneration_time 
+
+
+
 
 
 
