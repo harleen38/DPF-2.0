@@ -166,14 +166,14 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 
         
         # quantifying the burn_quality basis the burn_quality_percentage
-        #   0 <= burn_quality_percentage < 33 --> low burn_quality
-        if (burn_quality_percentage>0 and burn_quality_percentage<33):
+        #   0 < burn_quality_percentage <= 33 --> low burn_quality
+        if (burn_quality_percentage>0 and burn_quality_percentage<=33):
                 burn_quality = 'low'
-        #   33 <= burn_quality_percentage < 66 --> medium burn_quality        
-        elif (burn_quality_percentage>=33 and burn_quality_percentage<66):
+        #   33 < burn_quality_percentage <=66 --> medium burn_quality        
+        elif (burn_quality_percentage>33 and burn_quality_percentage<=66):
                 burn_quality = 'medium' 
-        #   66 <= burn_quality_percentage < 100 --> high burn_quality        
-        elif (burn_quality_percentage>=66 and burn_quality_percentage<100):
+        #   66 < burn_quality_percentage < 100 --> high burn_quality        
+        elif (burn_quality_percentage>66 and burn_quality_percentage<100):
                 burn_quality = 'high' 
         elif burn_quality_percentage == 0:
                burn_quality = 'failed' 
@@ -404,7 +404,7 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
         else:
                 actual_regeneration_time = active_regeneration_start_time
                 # if burn_quality is high --> speed_status should be sufficient --> 1
-                if burn_quality_percentage >= 66:
+                if burn_quality_percentage > 66:
                         speed_status = 1
                 # if burn quality anything apart from high --> speed status should be insufficient --> 0         
                 else:
