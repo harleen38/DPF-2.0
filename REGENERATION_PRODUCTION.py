@@ -1,16 +1,16 @@
-import pandas as pd
 import numpy as np
-import os
-import json
 from app.dataIO import get_obd_data 
 
 
 
 # function to be called for making the active-regeneration point shift
-def active_regeneration_shift(OBD_data, active_regeneration_start_time):
+def active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj):
         
-        # extracting the relevant parameter-ID
-        soot_load_pid = 'spn_5466_avg'
+        # extracting the relevant soot-load parameter-ID
+        soot_load_pid = '5466'
+        if 'dpf_soot_loading_pid' in spec_obj['additional_info']:
+               soot_load_pid = spec_obj['additional_info']['dpf_soot_loading_pid']
+        
         Time = []
         soot_load_Value = []
         for pac_idx in range(len(OBD_data)):
@@ -45,7 +45,8 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time):
                                       
 
 
-# function to be called for generation regeneration evidence
+
+# function to get the regeneration evidence for regeneration instance
 def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                             active_regeneration_start_time, active_regeneration_end_time, 
                             burn_quality_percentage):
@@ -62,7 +63,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                 # check the status of burn_quality
                 # if burn_quality == high  --> Set the speed status sufficient (1)
                 # else --> Set the speed status insufficient (0)
-                if burn_quality_percentage>=0.6 and burn_quality_percentage!=2:
+                if burn_quality_percentage>=66:
                         speed_status = 1
                 else:
                         speed_status = 0        
@@ -71,7 +72,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
         
         
         # if FLAG is set to "US" use the following RPM and Speed thresholds
-        if COUNTRY_FLAG == 'US':
+        if  COUNTRY_FLAG == 'US':
                 RPM_RANGE = [800, 2000]
                 SPEED_THRESHOLD = 80
 
@@ -104,11 +105,10 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                                 # extracting SPEED       
                                 if speed_pid in State:
                                         speed_inst_Value.append(State[speed_pid]['value'][0])    
-
-                                             
+          
                                 
         # applying the RPM constraint
-        # getting the correspnding values of different varaibles after applying constraints
+        # getting the corresponding values of different varaibles after applying constraints
         # Time1 constitutes of timestamps where the RPM conditions are met
         dp_rpm_constrained = []
         speed_rpm_constrained = []
@@ -122,6 +122,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                     Time1.append(Time[i])
                     rpm_constrained.append(rpm_inst_Value[i])
                     speed_rpm_constrained.append(speed_inst_Value[i])
+                
         
         # after applying the rpm-constraint check which are the nearest active regeneration start and end indices
         nearest_ar_start_idx = (np.abs(np.array(Time1) -  active_regeneration_start_time)).argmin()
@@ -130,7 +131,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
         # if the nearest start and end indices comes out to be same (which implies after applying the rpm-constraint we are 
         # not left with any valid point)
         if (nearest_ar_start_idx == nearest_ar_end_idx):
-                if burn_quality_percentage>=0.6 and burn_quality_percentage!=2:
+                if burn_quality_percentage>66:
                         speed_status = 1
                 else:
                         speed_status = 0
@@ -162,36 +163,30 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
         post_dp_window = dp_rpm_constrained[nearest_ar_end_idx:post_end_idx]
         post_rpm_window = rpm_constrained[nearest_ar_end_idx:post_end_idx]
         post_speed_window = speed_rpm_constrained[nearest_ar_end_idx:post_end_idx]
+
         
         # quantifying the burn_quality basis the burn_quality_percentage
-        #   0 <= burn_quality_percentage < 0.33 --> low burn_quality
-        if (burn_quality_percentage>=0 and burn_quality_percentage<0.33):
+        #   0 <= burn_quality_percentage < 33 --> low burn_quality
+        if (burn_quality_percentage>0 and burn_quality_percentage<33):
                 burn_quality = 'low'
-        #   0.33 <= burn_quality_percentage < 0.66 --> medium burn_quality        
-        elif (burn_quality_percentage>=0.33 and burn_quality_percentage<0.66):
+        #   33 <= burn_quality_percentage < 66 --> medium burn_quality        
+        elif (burn_quality_percentage>=33 and burn_quality_percentage<66):
                 burn_quality = 'medium' 
-        #   0.66 <= burn_quality_percentage < 1 --> high burn_quality        
-        elif (burn_quality_percentage>=0.66 and burn_quality_percentage<1):
+        #   66 <= burn_quality_percentage < 100 --> high burn_quality        
+        elif (burn_quality_percentage>=66 and burn_quality_percentage<100):
                 burn_quality = 'high' 
-        #  burn_quality_percentage == 2 --> failed burn            
-        elif burn_quality_percentage == 2:
-                burn_quality = 'failed'
+        elif burn_quality_percentage == 0:
+               burn_quality = 'failed' 
+                     
+        
 
         # reconcilation logic for low and high burn-quality        
         if (burn_quality == 'low') or (burn_quality == 'high'):
             
             # getting the partition for breaking the rpm-bins into two equal bins 
             bin_size = (RPM_RANGE[-1]-RPM_RANGE[0])//2       
-            # getting the columns (we are capturing the count and mean of the dp values in each of the rpm-bins)
-            columns = [
-                    'RPM Bin', 'Speed Bin', 'Count', 
-                    'Mean'
-                    ]
-
-            # capturing the decriptive statistics, and their corresponding rpm and speed bin
-            df_pre_statistics_all_vehicles = pd.DataFrame(columns = columns)
-            df_post_statistics_all_vehicles = pd.DataFrame(columns = columns)
-
+            
+        
             pre_descriptive_statistics_all_bins = []
             post_descriptive_statistics_all_bins = []
             pre_rpm_bin_considered = []
@@ -235,19 +230,19 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 
                     # if rpm with lower-speed bin
                     if len(pre_dp_in_rpm_low_speed_bin) > 0:
-                            summary_statistics =  pd.DataFrame(pre_dp_in_rpm_low_speed_bin).describe()  
+                            
                             pre_descriptive_statistics_all_bins.append([
-                                                            summary_statistics.loc['count'][0],
-                                                            summary_statistics.loc['mean'][0], 
+                                                            len(pre_dp_in_rpm_low_speed_bin),
+                                                            np.mean(pre_dp_in_rpm_low_speed_bin) 
                                                             ]) 
                             pre_rpm_bin_considered.append((bin, (bin+bin_size)))
                             pre_speed_bin_considered.append("<="+str(SPEED_THRESHOLD))
                                             
                     if len(post_dp_in_rpm_low_speed_bin) > 0:
-                            summary_statistics =  pd.DataFrame(post_dp_in_rpm_low_speed_bin).describe()  
+                            
                             post_descriptive_statistics_all_bins.append([
-                                                            summary_statistics.loc['count'][0],
-                                                            summary_statistics.loc['mean'][0] 
+                                                             len(post_dp_in_rpm_low_speed_bin),
+                                                             np.mean(post_dp_in_rpm_low_speed_bin) 
                                                     ]) 
                             post_rpm_bin_considered.append((bin, (bin+bin_size)))
                             post_speed_bin_considered.append("<="+str(SPEED_THRESHOLD))
@@ -255,68 +250,94 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 
                     # if rpm with higher-speed bin                
                     if len(pre_dp_in_rpm_high_speed_bin) > 0:
-                            summary_statistics =  pd.DataFrame(pre_dp_in_rpm_high_speed_bin).describe()  
+                            
                             pre_descriptive_statistics_all_bins.append([
-                                                            summary_statistics.loc['count'][0],
-                                                            summary_statistics.loc['mean'][0]]) 
+                                                            len(pre_dp_in_rpm_high_speed_bin),
+                                                            np.mean(pre_dp_in_rpm_high_speed_bin)])
                             pre_rpm_bin_considered.append((bin, (bin+bin_size)))
                             pre_speed_bin_considered.append(">"+str(SPEED_THRESHOLD))
 
                     if len(post_dp_in_rpm_high_speed_bin) > 0:
-                            summary_statistics =  pd.DataFrame(post_dp_in_rpm_high_speed_bin).describe()  
+                            
                             post_descriptive_statistics_all_bins.append([
-                                                                    summary_statistics.loc['count'][0],
-                                                                    summary_statistics.loc['mean'][0]]) 
+                                                                   len(post_dp_in_rpm_high_speed_bin),
+                                                                   np.mean(post_dp_in_rpm_high_speed_bin)]) 
                             post_rpm_bin_considered.append((bin, (bin+bin_size)))
                             post_speed_bin_considered.append(">"+str(SPEED_THRESHOLD))   
                                                             
                                     
+            pre_descriptive_statistics_all_bins = np.array(pre_descriptive_statistics_all_bins)
+            post_descriptive_statistics_all_bins = np.array(post_descriptive_statistics_all_bins)
+
+            # Create a function to create a 2D array from input arrays
+            def create_2d_array(arr1, arr2, arr3):
+                return np.column_stack((arr1, arr2, arr3))
+
+            
             if len(pre_descriptive_statistics_all_bins):
-                for j in range(len(pre_descriptive_statistics_all_bins)):  
-                        pre_row_data = []
-                        pre_row_data.append(pre_rpm_bin_considered[j]) #'RPM Bin'
-                        pre_row_data.append(pre_speed_bin_considered[j]) #'Speed Bin'
-                        pre_row_data.extend(pre_descriptive_statistics_all_bins[j]) 
-                        df_pre_statistics_all_vehicles.loc[len(df_pre_statistics_all_vehicles)] = pre_row_data
+                pre_statistics = create_2d_array(pre_rpm_bin_considered, pre_speed_bin_considered, pre_descriptive_statistics_all_bins)
         
             if len(post_descriptive_statistics_all_bins):
-                for j in range(len(post_descriptive_statistics_all_bins)):
-                        post_row_data = []  
-                        post_row_data.append(post_rpm_bin_considered[j]) #'RPM Bin'
-                        post_row_data.append(post_speed_bin_considered[j]) #'Speed Bin'
-                        post_row_data.extend(post_descriptive_statistics_all_bins[j]) 
-                        df_post_statistics_all_vehicles.loc[len(df_post_statistics_all_vehicles)] = post_row_data
+                post_statistics = create_2d_array(post_rpm_bin_considered, post_speed_bin_considered, post_descriptive_statistics_all_bins)
+                
 
-            # dropping off duplicates from pre and post dataframe
-            df_pre_statistics_all_vehicles = df_pre_statistics_all_vehicles.drop_duplicates()
-            df_post_statistics_all_vehicles = df_post_statistics_all_vehicles.drop_duplicates()
+            # Function to remove duplicates from a 2D array
+            def remove_duplicates(arr):
+                _, unique_indices = np.unique(arr, axis=0, return_index=True)
+                return arr[np.sort(unique_indices)]
 
-            # renaming the columns for pre and post statistical dataframes
-            df_pre_statistics_all_vehicles.columns = ["Pre RPM Bin", "Pre Speed Bin", 
-                                                    "Pre Count", "Pre Mean"]
-                    
-            df_post_statistics_all_vehicles.columns = ["Post RPM Bin", "Post Speed Bin", 
-                                                    "Post Count", "Post Mean"]
-                    
-            # combining pre and post dataframes basis RPM and SPEED bin values 
-            df_statistics = pd.merge(df_pre_statistics_all_vehicles, df_post_statistics_all_vehicles, how='inner', 
-                                    left_on=["Pre RPM Bin", "Pre Speed Bin"],
-                                    right_on = ["Post RPM Bin", "Post Speed Bin"])
-                    
-            # In case any duplicates generated while combining the two dataframes drop them
-            df_statistics = df_statistics.drop_duplicates()
+            # Remove duplicates from pre and post statistics arrays
+            if pre_descriptive_statistics_all_bins.size > 0:
+                pre_statistics = remove_duplicates(pre_statistics)
 
-            # dropping all those statistical bins wherein the Pre or Post Count of values are less than 5
-            indices_remove = df_statistics[(df_statistics['Pre Count']<5) | (df_statistics['Post Count']<5)].index
-            df_statistics.drop(indices_remove, inplace=True)
-         
-            fraction_good_bins = df_statistics[(df_statistics["Post Mean"]<df_statistics["Pre Mean"])].shape[0]/df_statistics.shape[0]
-            
+            if post_descriptive_statistics_all_bins.size > 0:
+                post_statistics = remove_duplicates(post_statistics)
+
+
+            # Function to merge pre and post statistics arrays based on RPM and Speed bins
+            def merge_statistics(pre_arr, post_arr):
+                merged_array = []
+
+                if pre_arr.shape[0] >= post_arr.shape[0]:
+                        for i in range(post_arr.shape[0]):
+                                idx_ls = np.where((pre_arr[:, 0] == post_arr[i, 0]) & (pre_arr[:, 1] == post_arr[i, 1]) &  (pre_arr[:, 2] == post_arr[i, 2]))[0]
+                                if len(idx_ls) > 0:
+                                        idx = idx_ls[0]
+                                        merged_array.append(np.concatenate((pre_arr[idx, :], post_arr[i, 3:])))
+                elif  post_arr.shape[0] >= pre_arr.shape[0]:
+                        for i in range(pre_arr.shape[0]):
+                                idx_ls = np.where((post_arr[:, 0] == pre_arr[i, 0]) & (post_arr[:, 1] == pre_arr[i, 1]) &  (post_arr[:, 2] == pre_arr[i, 2]))[0]
+                                if len(idx_ls) > 0:
+                                        idx = idx_ls[0]
+                                        merged_array.append(np.concatenate((pre_arr[i, :], post_arr[idx, 3:])))
+                                      
+
+                return np.array(merged_array)
+
+            # Merge pre and post statistics arrays
+            if pre_descriptive_statistics_all_bins.size > 0 and post_descriptive_statistics_all_bins.size > 0:
+                df_statistics = merge_statistics(pre_statistics, post_statistics)
+
+                fraction_good_bins = 0
+                relevant_bins = 0
+                for i in range(df_statistics.shape[0]):
+                       if float(df_statistics[i, 3]) >= 5 and float(df_statistics[i, 5]) >= 5:
+                              relevant_bins += 1
+                              if float(df_statistics[i, 4]) >  float(df_statistics[i, 6]):
+                                     fraction_good_bins += 1
+
+                if relevant_bins!=0:                   
+                      fraction_good_bins =  fraction_good_bins/relevant_bins
+                else:
+                       fraction_good_bins = 0                      
+
     
             # for "high" soot burn
             # the logic goes something like this
             # if 0/4 bins has the post-dp < pre-dp, classify as low
             # if 1/4 or 2/4 has the post-dp < pre-dp, classify as medium 
+           
+
             if burn_quality == 'high' and fraction_good_bins == 0:
                     burn_quality = 'low'
                     burn_quality_percentage = burn_quality_percentage/3
@@ -354,28 +375,36 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
         return speed_status, burn_quality_percentage 
 
 
-def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_start_time, active_regeneration_end_time, 
-                            burn_quality_percentage):
+
+# This fuction has to be called out
+# It calls three modules
+# get_obd_data to get the obd_data between the start and end time-stamp
+# active_regeneration_shift to calibrate the active-regeneration start time corresponding to the soot-load signal
+def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regeneration_start_time: int, active_regeneration_end_time: int, 
+                            burn_quality_percentage: float, spec_obj: dict):
     
         # extracting the OBD-data 
-        
+        # Start_TS is 1 hour prior to active-regen start time
+        # End_TS is 1 hour after the active-regen end time
         Start_TS = active_regeneration_start_time - 60*60*1000
         End_TS = active_regeneration_end_time + 60*60*1000
 
-        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)  
-
+        # getting the obd-data
+        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS) 
         
         # if the OBD_data is not empty
         if len(OBD_data): 
                 # mapping the actual-regeneration time
-                actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time)
+                actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj)
+                
+                # getting the burn_evidence for ecah active regeneration instance
                 speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
                                                                 active_regeneration_start_time, active_regeneration_end_time, 
                                                                 burn_quality_percentage)
         else:
                 actual_regeneration_time = active_regeneration_start_time
                 # if burn_quality is high --> speed_status should be sufficient --> 1
-                if burn_quality_percentage > 0.6:
+                if burn_quality_percentage >= 66:
                         speed_status = 1
                 # if burn quality anything apart from high --> speed status should be insufficient --> 0         
                 else:
@@ -383,6 +412,18 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id, COUNTRY_FLAG, active_regeneration_sta
         
 
         return speed_status, burn_quality_percentage, actual_regeneration_time 
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
