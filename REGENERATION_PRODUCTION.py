@@ -1,15 +1,16 @@
 import numpy as np
 from app.dataIO import get_obd_data 
-
+import json
+import requests
 
 
 # function to be called for making the active-regeneration point shift
 def active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj):
         
         # extracting the relevant soot-load parameter-ID
-        soot_load_pid = '5466'
+        
         if 'dpf_soot_loading_pid' in spec_obj['additional_info']:
-               soot_load_pid = spec_obj['additional_info']['dpf_soot_loading_pid']
+                soot_load_pid = spec_obj['additional_info']['dpf_soot_loading_pid']
         
         Time = []
         soot_load_Value = []
@@ -29,6 +30,7 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj
         
         # if soot load values are available --> find the point where maximum negative slope present
         slope = np.array(soot_load_Value[1:-1]) - np.array(soot_load_Value[0:-2])
+
         adjusted_index = np.argmin(slope)
 
         # if the point of maximum drop is greater than 10 minutes
@@ -38,10 +40,15 @@ def active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj
                 adjusted_index = idx_10_mins_before
         if (Time[adjusted_index-1]-active_regeneration_start_time)>(10*60*1000):
                 idx_10_mins_after = (np.abs(np.asarray(Time) - (active_regeneration_start_time + 10*60*1000))).argmin()
-                adjusted_index = idx_10_mins_after       
+                adjusted_index = idx_10_mins_after  
+
+        if slope[adjusted_index]<=-20:
+               actual_regeneration_time =  Time[adjusted_index-1]
+        else:
+               actual_regeneration_time =  active_regeneration_start_time                
                         
 
-        return Time[adjusted_index-1]
+        return actual_regeneration_time
                                       
 
 
@@ -55,6 +62,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                 
         # getting the active-regeneration duration in minutes
         active_regeneration_duration = (active_regeneration_end_time - active_regeneration_start_time)//(60*1000)
+        
         
         # corner case
         # if active_regeneration_start_time >= active_regeneration_end_time 
@@ -381,39 +389,51 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 # get_obd_data to get the obd_data between the start and end time-stamp
 # active_regeneration_shift to calibrate the active-regeneration start time corresponding to the soot-load signal
 # regeneration_evidence for evidence generation for each regeneration instance
+
+# the values returned are: 
 def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regeneration_start_time: int, active_regeneration_end_time: int, 
                             burn_quality_percentage: float, spec_obj: dict):
     
         # extracting the OBD-data 
         # Start_TS is 1 hour prior to active-regen start time
         # End_TS is 1 hour after the active-regen end time
-        Start_TS = active_regeneration_start_time - 60*60*1000
-        End_TS = active_regeneration_end_time + 60*60*1000
+        Start_TS = active_regeneration_start_time - 10*60*60*1000
+        End_TS = active_regeneration_end_time + 10*60*60*1000
+
+        active_regeneration_duration = (active_regeneration_end_time - active_regeneration_start_time)
+
+        if active_regeneration_duration//(60*1000) <= 10:
+               duration_status = 0
+        else:
+               duration_status = 1        
 
         # getting the obd-data
-        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS) 
+        OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)
+      
         
         # if the OBD_data is not empty
         if len(OBD_data): 
                 # mapping the actual-regeneration time
-                actual_regeneration_time = active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj)
+                actual_regeneration_start_time = active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj)
+                actual_regeneration_end_time = actual_regeneration_start_time + active_regeneration_duration
                 
                 # getting the burn_evidence for ecah active regeneration instance
                 speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
-                                                                active_regeneration_start_time, active_regeneration_end_time, 
-                                                                burn_quality_percentage)
+                                                               actual_regeneration_start_time, actual_regeneration_end_time, 
+                                                               burn_quality_percentage)
         else:
-                actual_regeneration_time = active_regeneration_start_time
-                # if burn_quality is high --> speed_status should be sufficient --> 1
+                actual_regeneration_start_time = active_regeneration_start_time
+                #if burn_quality is high --> speed_status should be sufficient --> 1
                 if burn_quality_percentage > 66:
-                        speed_status = 1
-                # if burn quality anything apart from high --> speed status should be insufficient --> 0         
+                       speed_status = 1
+                #if burn quality anything apart from high --> speed status should be insufficient --> 0         
                 else:
-                        speed_status = 0
+                       speed_status = 0
+                
+
         
-
-        return speed_status, burn_quality_percentage, actual_regeneration_time 
-
+        return actual_regeneration_start_time, duration_status, speed_status, burn_quality_percentage 
+        
 
 
 
