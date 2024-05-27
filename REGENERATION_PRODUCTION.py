@@ -390,7 +390,10 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 # active_regeneration_shift to calibrate the active-regeneration start time corresponding to the soot-load signal
 # regeneration_evidence for evidence generation for each regeneration instance
 
-# the values returned are: 
+# the values returned are:  actual_regeneration_start_time : 'Actual Time Of Start Of Regeneration'
+#                           duration_status :  1 --> if regen-duration sufficent, 0 --> if regen-duration insufficient 
+#                           speed_status : 1 ---> if speed sufficient during regen, 0 --> if speed insufficient 
+#                           burn_quality_percentage -- > modified burn-quality percentage after reconcilation
 def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regeneration_start_time: int, active_regeneration_end_time: int, 
                             burn_quality_percentage: float, spec_obj: dict):
     
