@@ -400,8 +400,8 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
         # extracting the OBD-data 
         # Start_TS is 1 hour prior to active-regen start time
         # End_TS is 1 hour after the active-regen end time
-        Start_TS = active_regeneration_start_time - 10*60*60*1000
-        End_TS = active_regeneration_end_time + 10*60*60*1000
+        Start_TS = active_regeneration_start_time - 70*60*1000 
+        End_TS = active_regeneration_end_time + 70*60*1000
 
         active_regeneration_duration = (active_regeneration_end_time - active_regeneration_start_time)
 
