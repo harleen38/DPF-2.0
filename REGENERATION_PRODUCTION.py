@@ -391,7 +391,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
 # regeneration_evidence for evidence generation for each regeneration instance
 
 # the values returned are:  actual_regeneration_start_time : 'Actual Time Of Start Of Regeneration'
-#                           duration_status :  1 --> if regen-duration sufficent, 0 --> if regen-duration insufficient 
+#                           duration_status :  0 --> if regen-duration (0, 10], 1 --> if regen-duration (10, 25], 2 --> if regen-duration (25, infinity)
 #                           speed_status : 1 ---> if speed sufficient during regen, 0 --> if speed insufficient 
 #                           burn_quality_percentage -- > modified burn-quality percentage after reconcilation
 def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regeneration_start_time: int, active_regeneration_end_time: int, 
@@ -405,10 +405,13 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
 
         active_regeneration_duration = (active_regeneration_end_time - active_regeneration_start_time)
 
+        # duration_status logging for the active-regeneration incident
         if active_regeneration_duration//(60*1000) <= 10:
-               duration_status = 0
+               duration_status = 0 # insufficient
+        elif 10 < active_regeneration_duration//(60*1000) <= 25:
+               duration_status = 1   # moderate   
         else:
-               duration_status = 1        
+               duration_status = 2  # sufficient       
 
         # getting the obd-data
         OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)
@@ -416,16 +419,13 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
         
         # if the OBD_data is not empty
         if len(OBD_data): 
-                # mapping the actual-regeneration time
-                actual_regeneration_start_time = active_regeneration_shift(OBD_data, active_regeneration_start_time, spec_obj)
-                actual_regeneration_end_time = actual_regeneration_start_time + active_regeneration_duration
                 
                 # getting the burn_evidence for ecah active regeneration instance
                 speed_status, burn_quality_percentage = regeneration_evidence(COUNTRY_FLAG, OBD_data,
-                                                               actual_regeneration_start_time, actual_regeneration_end_time, 
+                                                               active_regeneration_start_time, active_regeneration_end_time, 
                                                                burn_quality_percentage)
         else:
-                actual_regeneration_start_time = active_regeneration_start_time
+               
                 #if burn_quality is high --> speed_status should be sufficient --> 1
                 if burn_quality_percentage > 66:
                        speed_status = 1
@@ -435,7 +435,7 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
                 
 
         
-        return actual_regeneration_start_time, duration_status, speed_status, burn_quality_percentage 
+        return active_regeneration_start_time, duration_status, speed_status, burn_quality_percentage 
         
 
 
