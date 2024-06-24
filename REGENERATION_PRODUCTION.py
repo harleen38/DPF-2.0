@@ -113,8 +113,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
                                 # extracting SPEED       
                                 if speed_pid in State:
                                         speed_inst_Value.append(State[speed_pid]['value'][0])    
-          
-                                
+                              
         # applying the RPM constraint
         # getting the corresponding values of different varaibles after applying constraints
         # Time1 constitutes of timestamps where the RPM conditions are met
@@ -122,7 +121,7 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
         speed_rpm_constrained = []
         Time1 = []
         rpm_constrained = []
-
+        
         # iterating through each timestamp to make the RPM constraint check
         for i in range(len(Time)):
             if rpm_inst_Value[i]>=RPM_RANGE[0] and rpm_inst_Value[i]<=RPM_RANGE[-1]:
@@ -362,16 +361,20 @@ def regeneration_evidence(COUNTRY_FLAG, OBD_data,
         high_speed_count = 0
         # giving the duration and speed status for each of the moderate and low burn_quality
         if burn_quality != 'high':     
-                # if for atleast 50% of the time; the vehicle is running at required speed  
-                # then set the speed status to sufficient i.e. 1        
-                for speed in speed_inst_Value:
+                # if for atleast 50% of the regeneration time; the vehicle is running at required speed  
+                # then set the speed status to sufficient i.e. 1  
+                #  getting the index where active regeneration-starts & active-regeneration ends
+                ar_start_idx = (np.abs(np.array(Time) -  active_regeneration_start_time)).argmin()
+                ar_end_idx = (np.abs(np.array(Time) -  active_regeneration_end_time)).argmin()  
+           
+                for speed in speed_inst_Value[ar_start_idx:(ar_end_idx+1)]:
                         if speed >= SPEED_THRESHOLD:
                                 high_speed_count += 1
                 # if for atleast 50% of the time speed happens to be high during regeneration                
-                if high_speed_count/len(speed_inst_Value) > 0.5:    
+                if high_speed_count/len(speed_inst_Value[ar_start_idx:(ar_end_idx+1)]) > 0.5:    
                         speed_status = 1
                         
-                elif  high_speed_count/len(speed_inst_Value) <= 0.5: 
+                elif  high_speed_count/len(speed_inst_Value[ar_start_idx:(ar_end_idx+1)]) <= 0.5: 
                         speed_status = 0
         # if burn_quality is high ; keep the speed status sufficient               
         elif burn_quality == 'high':
@@ -415,8 +418,7 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
 
         # getting the obd-data
         OBD_data = get_obd_data(vehicle_id, Start_TS, End_TS)
-      
-        
+            
         # if the OBD_data is not empty
         if len(OBD_data): 
                 
@@ -437,6 +439,9 @@ def REGENERATION_EVIDENCE_MSTR(vehicle_id: str, COUNTRY_FLAG: str, active_regene
         
         return active_regeneration_start_time, duration_status, speed_status, burn_quality_percentage 
         
+
+
+
 
 
 
